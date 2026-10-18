@@ -3,7 +3,22 @@ import { file, number, z } from "zod";
 import { resolve } from "node:path";
 import { read, readFileSync } from "node:fs";
 import { exec, execSync } from "node:child_process";
-
+const SAFE_PREFIXES = [
+  "ls",
+  "cat",
+  "echo",
+  "pwd",
+  "which",
+  "find",
+  "head",
+  "tail",
+  "wc",
+  "git log",
+  "git status",
+  "git diff",
+];
+const isSafePrefix = (command: string) =>
+  SAFE_PREFIXES.some((prefix) => command.trim().startsWith(prefix));
 const cwd = resolve(process.argv[2] || process.cwd());
 
 const readTool = tool({
@@ -91,10 +106,32 @@ EXAMPLES:
     }
   },
 });
+const bashTool = tool({
+  description: `Execute shell command in the working directory
+  WHEN TO USE : running build commands,installing packages ,running tests , git operations ,directory listings
+  WHEN NOT TO USE : reading file contents(use readTool instead) , Searching for patterns (use grepTool instead)
+  DO NOT USE FOR: reading files (use readTool instead) , Searching for patterns (use grepTool instead)
+  
+  `,
+  inputSchema: z.object({
+    command: z.string().describe("Shell command to execute"),
+  }),
+  execute: async ({ command }) => {
+    if (!isSafePrefix(command)) {
+      return `Blocked command : ${command} requires approval.Only safe commands (${SAFE_PREFIXES.join(",")}) are allowed.`;
+    }
+    try {
+      const stdout = execSync(command, { encoding: "utf-8", timeout: 30_000 });
+      return stdout.trim();
+    } catch (e: any) {
+      return `Exit ${e.status ?? 1}: ${e.stdout || e.stderr || e.message || ""}`;
+    }
+  },
+});
 const agent = new ToolLoopAgent({
   model: "anthropic/claude-haiku-4.5",
   instructions: `You are a coding agent .\nWorking directory: ${cwd}`,
-  tools: { readTool, grepTool },
+  tools: { readTool, grepTool ,bashTool},
   stopWhen: stepCountIs(10),
 });
 const prompt = process.argv.slice(3).join(" ") || "Hello";
