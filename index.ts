@@ -3,6 +3,9 @@ import { file, number, z } from "zod";
 import { resolve } from "node:path";
 import { read, readFileSync } from "node:fs";
 import { exec, execSync } from "node:child_process";
+interface BashOperations {
+  exec(command: string): Promise<{ stdout: string; exitCode: number }>;
+}
 const SAFE_PREFIXES = [
   "ls",
   "cat",
@@ -17,8 +20,7 @@ const SAFE_PREFIXES = [
   "git status",
   "git diff",
 ];
-const isSafePrefix = (command: string) =>
-  SAFE_PREFIXES.some((prefix) => command.trim().startsWith(prefix));
+
 const cwd = resolve(process.argv[2] || process.cwd());
 
 const readTool = tool({
@@ -126,40 +128,59 @@ EXAMPLES:
     }
   },
 });
-const bashTool = tool({
-  description: `Execute a shell command in the working directory.
- 
-WHEN TO USE: running build commands, installing packages, running tests,
-  git operations, directory listings.
- 
-WHEN NOT TO USE: reading file contents (use read instead).
-  Searching for patterns (use grep instead).
- 
-DO NOT USE FOR: reading files (use read), searching code (use grep).
- 
-USAGE: command is a single shell string. Commands not in the safe-prefix
-  allowlist are blocked and return a clear error message.
- 
-EXAMPLES:
-  - List files: command "ls -la"
-  - Check git status: command "git status"
-  - Run a test suite: command "npm test"
-  `,
-  inputSchema: z.object({
-    command: z.string().describe("Shell command to execute"),
-  }),
-  execute: async ({ command }) => {
-    if (!isSafePrefix(command)) {
-      return `Blocked command : ${command} requires approval.Only safe commands (${SAFE_PREFIXES.join(",")}) are allowed.`;
-    }
+const localOps: BashOperations = {
+  exec: async (command) => {
     try {
-      const stdout = execSync(command, { encoding: "utf-8", timeout: 30_000 });
-      return stdout.trim();
+      const stdout = execSync(command, {
+        cwd,
+        encoding: "utf-8",
+        timeout: 30_000,
+      });
+      return { stdout, exitCode: 0 };
     } catch (e: any) {
-      return `Exit ${e.status ?? 1}: ${e.stdout || e.stderr || e.message || ""}`;
+      return {
+        stdout: e.stdout || e.stderr || e.message || "",
+        exitCode: e.status ?? 1,
+      };
     }
   },
-});
+};
+function createBashTool(operations: BashOperations, safePrefixes: string[]) {
+  function isSafePrefix(command: string): boolean {
+    return safePrefixes.some((prefix) => command.trim().startsWith(prefix));
+  }
+  return tool({
+    description: `Execute a shell command in the working directory.
+   
+  WHEN TO USE: running build commands, installing packages, running tests,
+    git operations, directory listings.
+   
+  WHEN NOT TO USE: reading file contents (use read instead).
+    Searching for patterns (use grep instead).
+   
+  DO NOT USE FOR: reading files (use read), searching code (use grep).
+   
+  USAGE: command is a single shell string. Commands not in the safe-prefix
+    allowlist are blocked and return a clear error message.
+   
+  EXAMPLES:
+    - List files: command "ls -la"
+    - Check git status: command "git status"
+    - Run a test suite: command "npm test"
+    `,
+    inputSchema: z.object({
+      command: z.string().describe("Shell command to execute"),
+    }),
+    execute: async ({ command }) => {
+      if (!isSafePrefix(command)) {
+        return `Blocked: "${command}" requires approval.`;
+      }
+      const { stdout } = await operations.exec(command);
+      return stdout || "(no output)";
+    },
+  });
+}
+const bashTool = createBashTool(localOps, SAFE_PREFIXES);
 const agent = new ToolLoopAgent({
   model: "anthropic/claude-haiku-4.5",
   instructions: `You are a coding agent .\nWorking directory: ${cwd}`,
