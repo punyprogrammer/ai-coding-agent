@@ -3,6 +3,9 @@ import { file, number, z } from "zod";
 import { resolve } from "node:path";
 import { read, readFileSync } from "node:fs";
 import { exec, execSync } from "node:child_process";
+interface BashOperations {
+  exec(command: string): Promise<{ stdout: string; exitCode: number }>;
+}
 const SAFE_PREFIXES = [
   "ls",
   "cat",
@@ -17,14 +20,23 @@ const SAFE_PREFIXES = [
   "git status",
   "git diff",
 ];
-const isSafePrefix = (command: string) =>
-  SAFE_PREFIXES.some((prefix) => command.trim().startsWith(prefix));
+
 const cwd = resolve(process.argv[2] || process.cwd());
 
 const readTool = tool({
-  description: `Read a file from the project .Returns numbered lines .
-  WHEN TO USE: viewing file contents ,checking configs,reading source code 
-  WHEN NOT TO USE: Searching across multiple files ,use grep instead
+  description: `Read a file from the project. Returns numbered lines.
+ 
+WHEN TO USE: viewing file contents, checking configurations, reading source code,
+  examining specific lines with offset/limit.
+ 
+WHEN NOT TO USE: searching for patterns across files (use grep instead).
+  Running commands (use bash instead).
+ 
+DO NOT USE FOR: searching code (use grep), executing commands (use bash),
+  modifying files (use edit or write).
+ 
+USAGE: path is relative to working directory. offset and limit are optional.
+  Output is capped at 500 lines.
   `,
   inputSchema: z.object({
     path: z.string().describe("File path relative to the working directory"),
@@ -54,13 +66,23 @@ const readTool = tool({
 });
 const grepTool = tool({
   description: `Search file contents using regex. Returns matching lines with file paths.
+ 
 WHEN TO USE: finding patterns across multiple files, locating function definitions,
   searching for imports, finding TODOs or error messages.
+ 
 WHEN NOT TO USE: reading a known file (use read instead).
-DO NOT USE FOR: running commands, listing directories.
+  Running commands (use bash instead).
+ 
+DO NOT USE FOR: reading files (use read), listing directories (use bash),
+  modifying files (use edit).
+ 
+USAGE: pattern is a regex string. glob filters by file extension.
+  Results are capped at 50 matches.
+ 
 EXAMPLES:
   - Find all TODO comments: pattern "TODO" glob "*.ts"
-  - Find function definitions: pattern "function \\\\w+" glob "*.ts"`,
+  - Find function definitions: pattern "function \\w+" glob "*.ts"
+  - Find imports of a package: pattern "from 'express'" glob "*.ts"`,
   inputSchema: z.object({
     pattern: z.string().describe("Regex pattern to search for "),
     glob: z
@@ -106,32 +128,63 @@ EXAMPLES:
     }
   },
 });
-const bashTool = tool({
-  description: `Execute shell command in the working directory
-  WHEN TO USE : running build commands,installing packages ,running tests , git operations ,directory listings
-  WHEN NOT TO USE : reading file contents(use readTool instead) , Searching for patterns (use grepTool instead)
-  DO NOT USE FOR: reading files (use readTool instead) , Searching for patterns (use grepTool instead)
-  
-  `,
-  inputSchema: z.object({
-    command: z.string().describe("Shell command to execute"),
-  }),
-  execute: async ({ command }) => {
-    if (!isSafePrefix(command)) {
-      return `Blocked command : ${command} requires approval.Only safe commands (${SAFE_PREFIXES.join(",")}) are allowed.`;
-    }
+const localOps: BashOperations = {
+  exec: async (command) => {
     try {
-      const stdout = execSync(command, { encoding: "utf-8", timeout: 30_000 });
-      return stdout.trim();
+      const stdout = execSync(command, {
+        cwd,
+        encoding: "utf-8",
+        timeout: 30_000,
+      });
+      return { stdout, exitCode: 0 };
     } catch (e: any) {
-      return `Exit ${e.status ?? 1}: ${e.stdout || e.stderr || e.message || ""}`;
+      return {
+        stdout: e.stdout || e.stderr || e.message || "",
+        exitCode: e.status ?? 1,
+      };
     }
   },
-});
+};
+function createBashTool(operations: BashOperations, safePrefixes: string[]) {
+  function isSafePrefix(command: string): boolean {
+    return safePrefixes.some((prefix) => command.trim().startsWith(prefix));
+  }
+  return tool({
+    description: `Execute a shell command in the working directory.
+   
+  WHEN TO USE: running build commands, installing packages, running tests,
+    git operations, directory listings.
+   
+  WHEN NOT TO USE: reading file contents (use read instead).
+    Searching for patterns (use grep instead).
+   
+  DO NOT USE FOR: reading files (use read), searching code (use grep).
+   
+  USAGE: command is a single shell string. Commands not in the safe-prefix
+    allowlist are blocked and return a clear error message.
+   
+  EXAMPLES:
+    - List files: command "ls -la"
+    - Check git status: command "git status"
+    - Run a test suite: command "npm test"
+    `,
+    inputSchema: z.object({
+      command: z.string().describe("Shell command to execute"),
+    }),
+    execute: async ({ command }) => {
+      if (!isSafePrefix(command)) {
+        return `Blocked: "${command}" requires approval.`;
+      }
+      const { stdout } = await operations.exec(command);
+      return stdout || "(no output)";
+    },
+  });
+}
+const bashTool = createBashTool(localOps, SAFE_PREFIXES);
 const agent = new ToolLoopAgent({
   model: "anthropic/claude-haiku-4.5",
   instructions: `You are a coding agent .\nWorking directory: ${cwd}`,
-  tools: { readTool, grepTool ,bashTool},
+  tools: { readTool, grepTool, bashTool },
   stopWhen: stepCountIs(10),
 });
 const prompt = process.argv.slice(3).join(" ") || "Hello";
