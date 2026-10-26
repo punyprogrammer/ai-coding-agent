@@ -6,20 +6,8 @@ import { BashOperations } from "./types/types";
 import createReadTool from "./tools/readTool";
 import createGrepTool from "./tools/grepTool";
 import createBashTool from "./tools/bashTool";
-const SAFE_PREFIXES = [
-  "ls",
-  "cat",
-  "echo",
-  "pwd",
-  "which",
-  "find",
-  "head",
-  "tail",
-  "wc",
-  "git log",
-  "git status",
-  "git diff",
-];
+
+import createApproval from "./config/approval";
 
 const cwd = resolve(process.argv[2] || process.cwd());
 
@@ -47,7 +35,7 @@ const agent = new ToolLoopAgent({
   tools: {
     read: createReadTool(cwd),
     grep: createGrepTool(cwd),
-    bash: createBashTool(localOps, SAFE_PREFIXES),
+    bash: createBashTool(localOps, createApproval({ mode: "background" })),
   },
 
   stopWhen: stepCountIs(10),
