@@ -58,6 +58,13 @@ const agent = new ToolLoopAgent({
       sandbox,
     ),
   },
+  onStepFinish: ({ usage, stepNumber, toolCalls }) => {
+    const tools =
+      toolCalls.map((call) => call.toolName).join(", ") || "(no tool)";
+    console.error(
+      `Step ${stepNumber}: ${tools} | ${usage.inputTokens} input, ${usage.outputTokens} output`,
+    );
+  },
 
   stopWhen: stepCountIs(10),
 });
