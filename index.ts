@@ -12,6 +12,7 @@ import createApproval from "./config/approval";
 import { getProjectContext } from "./prompt/projectContext";
 import { createLocalSandbox } from "./sandbox/local-sandbox";
 import { createJustBashSandbox } from "./sandbox/just-bash-sandbox";
+import { SandboxLifeCycle } from "./sandbox/sandbox";
 
 const cwd = resolve(process.argv[2] || process.cwd());
 const sandboxType = process.env.SANDBOX || "local";
@@ -19,6 +20,8 @@ const sandbox =
   sandboxType === "just-bash"
     ? await createJustBashSandbox(cwd)
     : createLocalSandbox(cwd);
+const lifeCycle: SandboxLifeCycle = {};
+await lifeCycle.afterStart?.(sandbox);
 const localOps: BashOperations = {
   exec: async (command) => {
     try {
@@ -59,6 +62,11 @@ const agent = new ToolLoopAgent({
   stopWhen: stepCountIs(10),
 });
 const prompt = process.argv.slice(3).join(" ") || "Hello";
-const { text, steps } = await agent.generate({ prompt });
-console.log(text);
-console.log(steps.map((step) => step.toolCalls).join("\n"));
+try {
+  const { text, steps } = await agent.generate({ prompt });
+  console.log(text);
+  console.log(steps.map((step) => step.toolCalls).join("\n"));
+} finally {
+  await lifeCycle.beforeStop?.(sandbox);
+  await sandbox.stop();
+}
