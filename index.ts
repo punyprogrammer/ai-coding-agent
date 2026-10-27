@@ -9,6 +9,7 @@ import createBashTool from "./tools/bashTool";
 import { buildSystemPrompt } from "./prompt/systemPrompt";
 import { readGitBranch } from "./prompt/gitBranch";
 import createApproval from "./config/approval";
+import { getProjectContext } from "./prompt/projectContext";
 
 const cwd = resolve(process.argv[2] || process.cwd());
 
@@ -37,6 +38,7 @@ const agent = new ToolLoopAgent({
     toolNames: ["read", "grep", "bash"],
     sandboxType: "local",
     gitBranch: readGitBranch(cwd),
+    projectContext: getProjectContext(cwd),
   }),
   tools: {
     read: createReadTool(cwd),
