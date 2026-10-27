@@ -11,6 +11,7 @@ function createBashTool(
   if (!sandbox) {
     throw new Error("Sandbox is required");
   }
+  const MAX_OUTPUT_LENGTH = 5000;
   return tool({
     description: `Execute a shell command in the working directory.
      
@@ -39,7 +40,12 @@ function createBashTool(
         return `Blocked: "${command}" requires approval.`;
       }
       const { stdout } = await sandbox.exec(command);
-      return stdout || "(no output)";
+      // keep only the last 5000 characters of the output
+      const truncated = stdout.length > MAX_OUTPUT_LENGTH;
+      return truncated
+        ? stdout.slice(-MAX_OUTPUT_LENGTH) +
+            `\n... truncated at 5000 characters`
+        : stdout || "(no output)";
     },
   });
 }
