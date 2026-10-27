@@ -11,9 +11,14 @@ import { readGitBranch } from "./prompt/gitBranch";
 import createApproval from "./config/approval";
 import { getProjectContext } from "./prompt/projectContext";
 import { createLocalSandbox } from "./sandbox/local-sandbox";
+import { createJustBashSandbox } from "./sandbox/just-bash-sandbox";
 
 const cwd = resolve(process.argv[2] || process.cwd());
-const sandbox = createLocalSandbox(cwd);
+const sandboxType = process.env.SANDBOX || "local";
+const sandbox =
+  sandboxType === "just-bash"
+    ? await createJustBashSandbox(cwd)
+    : createLocalSandbox(cwd);
 const localOps: BashOperations = {
   exec: async (command) => {
     try {
