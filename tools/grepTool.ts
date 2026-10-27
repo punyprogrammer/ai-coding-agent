@@ -3,8 +3,12 @@ import { execSync } from "child_process";
 import { resolve } from "node:path";
 
 import z from "zod";
+import { Sandbox } from "../sandbox/sandbox";
 
-function createGrepTool(cwd: string) {
+function createGrepTool(cwd: string, sandbox?: Sandbox) {
+  if (!sandbox) {
+    throw new Error("Sandbox is required");
+  }
   return tool({
     description: `Search file contents using regex. Returns matching lines with file paths.
          
@@ -42,7 +46,7 @@ function createGrepTool(cwd: string) {
       const cmd = `grep -rn --exclude-dir=node_modules --exclude-dir=.git --include='${escapedGlob}' -E '${escapedPattern}' '${dir}' 2>/dev/null`;
 
       try {
-        const stdout = execSync(cmd, { encoding: "utf-8", timeout: 10_000 });
+        const { stdout } = await sandbox.exec(cmd);
         const lines = stdout.trim().split("\n").filter(Boolean);
 
         const MAX_MATCHES = 50;

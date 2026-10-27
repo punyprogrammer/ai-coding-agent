@@ -3,8 +3,12 @@ import { resolve } from "node:path";
 import { readFileSync } from "fs";
 
 import z from "zod";
+import { Sandbox } from "../sandbox/sandbox";
 
-function createReadTool(cwd: string) {
+function createReadTool(cwd: string, sandbox?: Sandbox) {
+  if (!sandbox) {
+    throw new Error("Sandbox is required");
+  }
   return tool({
     description: `Read a file from the project. Returns numbered lines.
          
@@ -27,7 +31,7 @@ function createReadTool(cwd: string) {
     }),
     execute: async ({ path: filePath, offset, limit }) => {
       const absPath = resolve(cwd, filePath);
-      const content = readFileSync(absPath, "utf-8");
+      const content = await sandbox.readFile(absPath);
       let lines = content.split("\n");
       if (offset) {
         lines = lines.slice(offset - 1);

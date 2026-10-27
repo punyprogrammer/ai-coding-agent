@@ -1,11 +1,16 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { BashOperations } from "../types/types";
+import { Sandbox } from "../sandbox/sandbox";
 
 function createBashTool(
   operations: BashOperations,
   needsApproval: (input: { command: string }) => boolean,
+  sandbox?: Sandbox,
 ) {
+  if (!sandbox) {
+    throw new Error("Sandbox is required");
+  }
   return tool({
     description: `Execute a shell command in the working directory.
      
@@ -33,7 +38,7 @@ function createBashTool(
       if (needsApproval({ command })) {
         return `Blocked: "${command}" requires approval.`;
       }
-      const { stdout } = await operations.exec(command);
+      const { stdout } = await sandbox.exec(command);
       return stdout || "(no output)";
     },
   });
