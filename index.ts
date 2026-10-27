@@ -1,4 +1,4 @@
-import { ToolLoopAgent, stepCountIs } from "ai";
+import { ToolLoopAgent, pruneMessages, stepCountIs } from "ai";
 
 import { resolve } from "node:path";
 import { execSync } from "node:child_process";
@@ -67,6 +67,21 @@ const agent = new ToolLoopAgent({
   },
 
   stopWhen: stepCountIs(10),
+  prepareCall: async (options) => ({
+    ...options,
+    messages: options.messages
+      ? pruneMessages({
+          messages: options.messages,
+          toolCalls: "before-last-3-messages",
+        })
+      : undefined,
+  }),
+  prepareStep: async ({ messages }) => ({
+    messages: pruneMessages({
+      messages,
+      toolCalls: "before-last-3-messages",
+    }),
+  }),
 });
 const prompt = process.argv.slice(3).join(" ") || "Hello";
 try {
