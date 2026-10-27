@@ -10,9 +10,10 @@ import { buildSystemPrompt } from "./prompt/systemPrompt";
 import { readGitBranch } from "./prompt/gitBranch";
 import createApproval from "./config/approval";
 import { getProjectContext } from "./prompt/projectContext";
+import { createLocalSandbox } from "./sandbox/local-sandbox";
 
 const cwd = resolve(process.argv[2] || process.cwd());
-
+const sandbox = createLocalSandbox(cwd);
 const localOps: BashOperations = {
   exec: async (command) => {
     try {
@@ -41,9 +42,13 @@ const agent = new ToolLoopAgent({
     projectContext: getProjectContext(cwd),
   }),
   tools: {
-    read: createReadTool(cwd),
-    grep: createGrepTool(cwd),
-    bash: createBashTool(localOps, createApproval({ mode: "background" })),
+    read: createReadTool(cwd, sandbox),
+    grep: createGrepTool(cwd, sandbox),
+    bash: createBashTool(
+      localOps,
+      createApproval({ mode: "background" }),
+      sandbox,
+    ),
   },
 
   stopWhen: stepCountIs(10),
