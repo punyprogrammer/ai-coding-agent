@@ -1,17 +1,16 @@
 import { tool } from "ai";
-import { z } from "zod";
-import { BashOperations } from "../types/types";
+import z from "zod";
 import { Sandbox } from "../sandbox/sandbox";
 
-function createBashTool(
-  operations: BashOperations,
-  needsApproval: (input: { command: string }) => boolean,
-  sandbox?: Sandbox,
-) {
+function createBashTool(cwd: string, sandbox?: Sandbox) {
   if (!sandbox) {
     throw new Error("Sandbox is required");
   }
-  const MAX_OUTPUT_LENGTH = 5000;
+  // Lesson 3: Bash tool
+  // Executes an arbitrary shell command inside the sandbox environment.
+  // Primary utility: enables any action that read/grep cannot cover — running
+  // builds, tests, installs, git operations, file mutations, and directory
+  // listings — while surfacing both stdout and non-zero exit codes to the agent.
   return tool({
     description: `Execute a shell command in the working directory.
      
@@ -36,16 +35,18 @@ function createBashTool(
       command: z.string().describe("Shell command to execute"),
     }),
     execute: async ({ command }) => {
-      if (needsApproval({ command })) {
-        return `Blocked: "${command}" requires approval.`;
+      try {
+        const { stdout, exitCode } = await sandbox.exec(command);
+        if (exitCode !== 0) {
+          return stdout || `Command failed with exit code ${exitCode}`;
+        }
+        return stdout || "(no output)";
+      } catch (error) {
+        if (error instanceof Error) {
+          return error.message;
+        }
+        throw error;
       }
-      const { stdout } = await sandbox.exec(command);
-      // keep only the last 5000 characters of the output
-      const truncated = stdout.length > MAX_OUTPUT_LENGTH;
-      return truncated
-        ? stdout.slice(-MAX_OUTPUT_LENGTH) +
-            `\n... truncated at 5000 characters`
-        : stdout || "(no output)";
     },
   });
 }
