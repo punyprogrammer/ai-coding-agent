@@ -26,7 +26,9 @@ export function buildSystemPrompt(context: PromptContext) {
     # Guardrails
     - Prefer simple, minimal changes
     - Search before creating, and reuse existing patterns
-    - No new dependencies without asking`);
+    - No new dependencies without asking
+    - Read each file at most once. Use the earlier result instead of reading it again.
+    - Do not delegate the same investigation twice. Use the earlier subagent result.`);
   if (context.projectContext) {
     sections.push(`
     # Project Instructions (from AGENTS.md)

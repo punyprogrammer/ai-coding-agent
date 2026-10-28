@@ -6,9 +6,7 @@ import createGrepTool from "./tools/grepTool";
 import createBashTool from "./tools/bashTool";
 import { buildSystemPrompt } from "./prompt/systemPrompt";
 import { readGitBranch } from "./prompt/gitBranch";
-import createApproval from "./config/approval";
 import { getProjectContext } from "./prompt/projectContext";
-import { createLocalOperations } from "./sandbox/local-operations";
 import { createLocalSandbox } from "./sandbox/local-sandbox";
 import { createJustBashSandbox } from "./sandbox/just-bash-sandbox";
 import { SandboxLifeCycle } from "./sandbox/sandbox";
@@ -23,15 +21,10 @@ const sandbox =
     : createLocalSandbox(workingDir);
 const lifeCycle: SandboxLifeCycle = {};
 await lifeCycle.afterStart?.(sandbox);
-const localOps = createLocalOperations(workingDir);
 const tools = {
   read: createReadTool(workingDir, sandbox),
   grep: createGrepTool(workingDir, sandbox),
-  bash: createBashTool(
-    localOps,
-    createApproval({ mode: "background" }),
-    sandbox,
-  ),
+  bash: createBashTool(workingDir, sandbox),
 };
 const toolsWithTask = {
   ...tools,
@@ -61,7 +54,9 @@ const agent = new ToolLoopAgent({
     const pruned = options.messages
       ? pruneMessages({
           messages: options.messages,
-          toolCalls: "before-last-3-messages",
+          toolCalls: [
+          { type: "before-last-3-messages", tools: ["bash", "grep"] },
+        ],
         })
       : undefined;
 
@@ -74,7 +69,9 @@ const agent = new ToolLoopAgent({
     messages: addCacheControl(
       pruneMessages({
         messages,
-        toolCalls: "before-last-3-messages",
+        toolCalls: [
+          { type: "before-last-3-messages", tools: ["bash", "grep"] },
+        ],
       }),
     ),
   }),

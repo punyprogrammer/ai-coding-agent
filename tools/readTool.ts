@@ -1,7 +1,4 @@
 import { tool } from "ai";
-import { resolve } from "node:path";
-import { readFileSync } from "fs";
-
 import z from "zod";
 import { Sandbox } from "../sandbox/sandbox";
 
@@ -9,6 +6,10 @@ function createReadTool(cwd: string, sandbox?: Sandbox) {
   if (!sandbox) {
     throw new Error("Sandbox is required");
   }
+  // Lesson 1: Read tool
+  // Reads a file from the sandbox and returns its contents as numbered lines.
+  // Primary utility: lets the agent inspect any file by path, with optional
+  // offset and line-limit controls to avoid loading large files in full.
   return tool({
     description: `Read a file from the project. Returns numbered lines.
          
@@ -29,25 +30,21 @@ function createReadTool(cwd: string, sandbox?: Sandbox) {
       offset: z.number().optional().describe("Start line (1-indexed)"),
       limit: z.number().optional().describe("Max lines to return "),
     }),
-    execute: async ({ path: filePath, offset, limit }) => {
-      const absPath = resolve(cwd, filePath);
-      const content = await sandbox.readFile(absPath);
-      let lines = content.split("\n");
-      if (offset) {
-        lines = lines.slice(offset - 1);
+    execute: async ({ path, offset, limit }) => {
+      try {
+        const content = await sandbox.readFile(path);
+        let lines = content.split("\n");
+        const start = offset && offset > 0 ? offset - 1 : 0;
+        lines = lines.slice(start, start + (limit && limit > 0 ? limit : 500));
+        return lines
+          .map((line, index) => `${start + index + 1}: ${line}`)
+          .join("\n");
+      } catch (error) {
+        if (error instanceof Error) {
+          return error.message;
+        }
+        throw error;
       }
-      if (limit) {
-        lines = lines.slice(0, limit);
-      }
-      const MAX_LINES = 500;
-      const truncated = lines.length > MAX_LINES;
-      lines = truncated ? lines.slice(0, MAX_LINES) : lines;
-      const numbered = lines.map(
-        (line, index) => `${(offset || 1) + index}: ${line}`,
-      );
-      return truncated
-        ? numbered.join("\n") + `\n... truncated at ${MAX_LINES} lines`
-        : numbered.join("\n");
     },
   });
 }
