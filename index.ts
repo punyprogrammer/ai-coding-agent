@@ -13,6 +13,7 @@ import { getProjectContext } from "./prompt/projectContext";
 import { createLocalSandbox } from "./sandbox/local-sandbox";
 import { createJustBashSandbox } from "./sandbox/just-bash-sandbox";
 import { SandboxLifeCycle } from "./sandbox/sandbox";
+import { addCacheControl } from "./helpers/cache-control";
 
 const cwd = resolve(process.argv[2] || process.cwd());
 const sandboxType = process.env.SANDBOX || "local";
@@ -61,26 +62,33 @@ const agent = new ToolLoopAgent({
   onStepFinish: ({ usage, stepNumber, toolCalls }) => {
     const tools =
       toolCalls.map((call) => call.toolName).join(", ") || "(no tool)";
+    const { cacheReadTokens, cacheWriteTokens } = usage.inputTokenDetails;
     console.error(
-      `Step ${stepNumber}: ${tools} | ${usage.inputTokens} input, ${usage.outputTokens} output`,
+      `Step ${stepNumber}: ${tools} | ${usage.inputTokens} input, ${usage.outputTokens} output, cache read ${cacheReadTokens ?? 0}, cache write ${cacheWriteTokens ?? 0}`,
     );
   },
 
-  stopWhen: stepCountIs(10),
-  prepareCall: async (options) => ({
-    ...options,
-    messages: options.messages
+  stopWhen: stepCountIs(100),
+  prepareCall: async (options) => {
+    const pruned = options.messages
       ? pruneMessages({
           messages: options.messages,
           toolCalls: "before-last-3-messages",
         })
-      : undefined,
-  }),
+      : undefined;
+
+    return {
+      ...options,
+      messages: pruned ? addCacheControl(pruned) : undefined,
+    };
+  },
   prepareStep: async ({ messages }) => ({
-    messages: pruneMessages({
-      messages,
-      toolCalls: "before-last-3-messages",
-    }),
+    messages: addCacheControl(
+      pruneMessages({
+        messages,
+        toolCalls: "before-last-3-messages",
+      }),
+    ),
   }),
 });
 const prompt = process.argv.slice(3).join(" ") || "Hello";
