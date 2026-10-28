@@ -15,18 +15,18 @@ import { SandboxLifeCycle } from "./sandbox/sandbox";
 import { addCacheControl } from "./helpers/cache-control";
 import { createTaskTool } from "./tools/tasktool";
 
-const cwd = resolve(process.argv[2] || process.cwd());
+const workingDir = resolve(process.argv[2] || process.cwd());
 const sandboxType = process.env.SANDBOX || "local";
 const sandbox =
   sandboxType === "just-bash"
-    ? await createJustBashSandbox(cwd)
-    : createLocalSandbox(cwd);
+    ? await createJustBashSandbox(workingDir)
+    : createLocalSandbox(workingDir);
 const lifeCycle: SandboxLifeCycle = {};
 await lifeCycle.afterStart?.(sandbox);
-const localOps = createLocalOperations(cwd);
+const localOps = createLocalOperations(workingDir);
 const tools = {
-  read: createReadTool(cwd, sandbox),
-  grep: createGrepTool(cwd, sandbox),
+  read: createReadTool(workingDir, sandbox),
+  grep: createGrepTool(workingDir, sandbox),
   bash: createBashTool(
     localOps,
     createApproval({ mode: "background" }),
@@ -40,11 +40,11 @@ const toolsWithTask = {
 const agent = new ToolLoopAgent({
   model: "anthropic/claude-haiku-4.5",
   instructions: buildSystemPrompt({
-    workingDirectory: cwd,
+    workingDirectory: workingDir,
     toolNames: ["read", "grep", "bash"],
     sandboxType: "local",
-    gitBranch: readGitBranch(cwd),
-    projectContext: getProjectContext(cwd),
+    gitBranch: readGitBranch(workingDir),
+    projectContext: getProjectContext(workingDir),
   }),
   tools: toolsWithTask,
   onStepFinish: ({ usage, stepNumber, toolCalls }) => {
