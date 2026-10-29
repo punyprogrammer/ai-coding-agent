@@ -12,6 +12,7 @@ import { createJustBashSandbox } from "./sandbox/just-bash-sandbox";
 import { SandboxLifeCycle } from "./sandbox/sandbox";
 import { addCacheControl } from "./helpers/cache-control";
 import { createTaskTool } from "./tools/tasktool";
+import { createAskUserTool } from "./tools/askUserTool";
 
 const workingDir = resolve(process.argv[2] || process.cwd());
 const sandboxType = process.env.SANDBOX || "local";
@@ -25,6 +26,7 @@ const tools = {
   read: createReadTool(workingDir, sandbox),
   grep: createGrepTool(workingDir, sandbox),
   bash: createBashTool(workingDir, sandbox),
+  askUser: createAskUserTool(),
 };
 const toolsWithTask = {
   ...tools,
@@ -55,8 +57,8 @@ const agent = new ToolLoopAgent({
       ? pruneMessages({
           messages: options.messages,
           toolCalls: [
-          { type: "before-last-3-messages", tools: ["bash", "grep"] },
-        ],
+            { type: "before-last-3-messages", tools: ["bash", "grep"] },
+          ],
         })
       : undefined;
 
